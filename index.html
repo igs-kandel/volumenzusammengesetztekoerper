@@ -129,11 +129,24 @@ z-index:1000;
     box-shadow:none;
   ">×</button>
   <div id="popupText"></div>
+  <button id="popupActionBtn" style="
+    display:none;
+    margin:26px auto 0;
+    font-size:24px;
+    font-weight:700;
+    padding:12px 28px;
+    border:0;
+    border-radius:16px;
+    background:#111;
+    color:white;
+    cursor:pointer;
+    box-shadow:0 8px 18px rgba(0,0,0,.18);
+  ">Los</button>
 </div>
   <div style="display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;flex:0 0 auto;">
-<button id="fillBtn" style="background:#16a34a;">1. Möglichkeit</button>
-<button id="btn2" style="background:#111;">2. Möglichkeit</button>
-<button id="btn3" style="background:#ea580c;">3. Möglichkeit</button>
+<button id="fillBtn" style="background:#16a34a;">Körper mit Würfeln füllen</button>
+<button id="btn2" style="background:#111;display:none;">1. Möglichkeit</button>
+<button id="btn3" style="background:#ea580c;display:none;">2. Möglichkeit</button>
 <button id="btnNew" style="background:#7c3aed;display:none;">Neue Aufgabe</button>
 <button id="task2SplitBtn" style="background:#111;display:none;">Zerteilen</button>
 <button id="task2CompleteBtn" style="background:#ea580c;display:none;">Ergänzen</button>
@@ -169,7 +182,7 @@ const btnNew=document.getElementById("btnNew");
 const task2SplitBtn=document.getElementById("task2SplitBtn");
 const task2CompleteBtn=document.getElementById("task2CompleteBtn");
 
-let rx=-0.15, ry=-0.55, scale=125;
+let rx=0.28, ry=0.62, scale=108;
 let draggingModel=false, draggingCube=null, lastX=0, lastY=0, activePointerId=null;
 let cubesVisible=false;
 let splitMode=false;
@@ -187,18 +200,38 @@ let showCompleteButton=false;
 let showSplitButton=false;
 let showComplementBlock=false;
 let onPopupClose=null;
-function showPopup(message, color){
+let calcPopupShown=false;
+let calcOptionsUnlocked=false;
+function showPopup(message, color, actionText=null, actionCallback=null){
   const box=document.getElementById("popupBox");
   const txt=document.getElementById("popupText");
+  const action=document.getElementById("popupActionBtn");
   if(!box || !txt) return;
   txt.textContent=message;
   box.style.color=color;
   box.style.borderColor=color;
   box.style.display="block";
+
+  if(action){
+    if(actionText && actionCallback){
+      action.textContent=actionText;
+      action.style.background=color;
+      action.style.display="block";
+      action.onclick=actionCallback;
+    } else {
+      action.style.display="none";
+      action.onclick=null;
+    }
+  }
 }
 function hidePopup(){
   const box=document.getElementById("popupBox");
+  const action=document.getElementById("popupActionBtn");
   if(box) box.style.display="none";
+  if(action){
+    action.style.display="none";
+    action.onclick=null;
+  }
   if(onPopupClose){
     const fn=onPopupClose;
     onPopupClose=null;
@@ -219,6 +252,27 @@ const fillCells=[
   {x:0,y:1,z:0},{x:0,y:2,z:0}
 ];
 const occupied=new Map();
+
+function showCalculationIntroPopup(){
+  if(calcPopupShown) return;
+  calcPopupShown=true;
+
+  setTimeout(()=>{
+    showPopup(
+      "Sehr gut! Der Körper ist mit 6 cm³-Würfeln gefüllt. Er hat somit ein Volumen von 6 cm³. Jetzt lernen wir, wie wir das Volumen solcher „schräger“ Körper auch rechnerisch bestimmen können!",
+      "#111",
+      "Los",
+      ()=>{
+        hidePopup();
+        calcOptionsUnlocked=true;
+        btn.style.display="none";
+        btn2.style.display="inline-block";
+        btn3.style.display="inline-block";
+        draw();
+      }
+    );
+  },2000);
+}
 
 function updateVolumeCounter(){
   const counter=document.getElementById("volumeCounter");
@@ -419,6 +473,18 @@ function drawSplitOverlay(){
     poly(it.pts,it.c,"#000",3);
   }
 
+  // Maße am blauen unteren Quader
+  ctx.font="32px Arial";
+  drawMovingText("4 cm", P(2,-.35,1.08));
+  // Beide 1-cm-Angaben rechts an den passenden Kanten:
+  drawMovingText("1 cm", P(4.16,0.55,1.08)); // Höhe an der rechten Vorderkante
+  drawMovingText("1 cm", P(4.28,0.18,0.5));  // Tiefe an der rechten Seitenkante
+
+  // Bewegte Maße am roten Quader
+  drawMovingText("2 cm", P(1.12, 2.05 + move, 1.08));     // Höhe
+  drawMovingText("1 cm", P(0.45, 3.18 + move, 1.08));     // Länge
+  drawMovingText("1 cm", P(1.08, 3.02 + move, 0.48));     // Tiefe oben
+
   ctx.font="32px Arial";
   ctx.fillStyle="#2563eb";
   let ps=project(P(2,-0.9,1.2));
@@ -491,6 +557,23 @@ function drawCompleteOverlay(){
     poly(it.pts,it.c,it.edge,3);
   }
 
+  // Maße am blauen Körper in der Ergänzen-Ansicht
+  ctx.font="32px Arial";
+  drawMovingText("4 cm", P(2,-.35,1.08), "#111");      // Länge unten
+  drawMovingText("3 cm", P(-.68,1.35,1.08), "#111");   // Höhe links
+
+  // Bewegte Maße am orangefarbenen Ergänzungsquader
+  if(showComplementBlock){
+    ctx.font="32px Arial";
+    // Orangefarbener Ergänzungsquader:
+    // 3 cm an die vordere lange Kante
+    drawMovingText("3 cm", P(2.55 + move, 1.02 + move, 1.08), "#ea580c");
+    // 2 cm bleibt an der rechten Höhenkante
+    drawMovingText("2 cm", P(4.18 + move, 1.95 + move, 0.5), "#ea580c");
+    // 1 cm an die obere rechte Tiefenkante
+    drawMovingText("1 cm", P(4.08 + move, 3.05 + move, 0.55), "#ea580c");
+  }
+
   ctx.font="32px Arial";
   const ps=project(P(2,-0.9,1.2));
   const x0=ps.x-310, y0=ps.y;
@@ -516,11 +599,31 @@ function drawScene(){
  for(const e of activeOuterEdges())drawEdge(e[0],e[1]);
 }
 
+function drawMovingText(t,pos,color="#111"){
+ const p=project(pos);
+ ctx.fillStyle=color;
+ ctx.fillText(t,p.x,p.y);
+}
+
 function drawLabels(){
  ctx.fillStyle="#111";ctx.font="32px Arial";
  const labels = currentTask===2
-   ? [["3 cm",P(1.5,-.35,1.08)],["2 cm",P(-.68,1.0,1.08)],["2 cm",P(1.0,2.25,1.08)],["2 cm",P(3.15,.22,1)]]
-   : [["4 cm",P(2,-.35,1.08)],["3 cm",P(-.68,1.35,1.08)],["3 cm",P(2.45,1.22,1.08)],["2 cm",P(1.1,2.05,1.08)],["1 cm",P(4.16,.22,.5)]];
+   ? [
+      ["3 cm",P(1.5,-.35,2.08)],
+      ["2 cm",P(-.68,1.0,2.08)],
+      ["2 cm",P(1.0,2.25,2.08)],
+      ["2 cm",P(3.15,.22,1.5)],
+      ["1 cm",P(2.45,1.25,2.08)],
+      ["1 cm",P(2.08,1.55,2.08)]
+     ]
+   : [
+      ["4 cm",P(2,-.35,1.08)],
+      ["3 cm",P(-.68,1.35,1.08)],
+      ["3 cm",P(2.45,1.22,1.08)],
+      ["2 cm",P(1.1,2.05,1.08)],
+      ["1 cm",P(4.16,.22,.5)],
+      ["1 cm",P(-0.05,3.25,1.08)]
+     ];
  for(const [t,pos] of labels){const p=project(pos);ctx.fillText(t,p.x,p.y);}
 }
 
@@ -599,6 +702,7 @@ function hitSplitButton(mx,my){
 
 function startSplitAnimationNow(){
   showSplitButton=false;
+  btnNew.style.display="none";
   splitMode=true;
   splitAnimStart=performance.now();
   startAnimation();
@@ -692,6 +796,17 @@ function drawTask2SplitOverlay(){
 
   items.sort((a,b)=>a.z-b.z);
   for(const it of items) poly(it.pts,it.c,"#000",3);
+
+  ctx.font="32px Arial";
+  // Maße am blauen Grundquader
+  drawMovingText("3 cm", P(1.5,-.35,2.08), "#111");
+  drawMovingText("1 cm", P(3.15,.55,2.08), "#111");
+  drawMovingText("2 cm", P(3.25,.20,1.0), "#111");
+
+  // Bewegte Maße am roten Quader
+  drawMovingText("2 cm", P(1.0,2.22+move,2.08), "#dc2626");
+  drawMovingText("1 cm", P(-.68,1.45+move,2.08), "#dc2626");
+  drawMovingText("2 cm", P(2.05,1.95+move,1.0), "#dc2626");
 }
 
 function drawTask2CompleteOverlay(){
@@ -733,6 +848,19 @@ function drawTask2CompleteOverlay(){
 
   items.sort((a,b)=>a.z-b.z);
   for(const it of items) poly(it.pts,it.c,"#000",3);
+
+  ctx.font="32px Arial";
+  // Maße am blauen Körper
+  drawMovingText("3 cm", P(1.5,-.35,2.08), "#111");
+  drawMovingText("2 cm", P(-.68,1.0,2.08), "#111");
+  drawMovingText("2 cm", P(3.15,.22,1.5), "#111");
+  drawMovingText("1 cm", P(2.45,1.25,2.08), "#111");
+  drawMovingText("1 cm", P(2.08,1.55,2.08), "#111");
+
+  // Bewegte Maße am orangefarbenen Ergänzungsquader
+  drawMovingText("1 cm", P(2.5+move,1.22+move,2.08), "#ea580c");
+  drawMovingText("1 cm", P(3.12+move,1.55+move,2.08), "#ea580c");
+  drawMovingText("2 cm", P(3.18+move,1.22+move,1.0), "#ea580c");
 }
 
 
@@ -859,7 +987,9 @@ function draw(){
  } else {
    drawScene();
  }
- drawLabels();
+ if(!splitMode && !completeMode && !task2SplitMode && !task2CompleteMode){
+   drawLabels();
+ }
  if(cubesVisible){
    for(const c of cubes){
      if(c.snap===null && !c.hidden) drawLooseCube(c);
@@ -890,9 +1020,15 @@ btn.onclick=()=>{
  clearTaskQuestionPanel();
  task2SplitBtn.style.display='none';
  task2CompleteBtn.style.display='none';
+ btn2.style.display='none';
+ btn3.style.display='none';
+ btnNew.style.display='none';
+ calcPopupShown=false;
+ calcOptionsUnlocked=false;
  stopAnimation();
  splitMode=false;
  completeMode=false;
+ showSplitButton=false;
  showCompleteButton=false;
  showComplementBlock=false;
  
@@ -991,29 +1127,34 @@ btnNew.onclick=()=>{
   document.getElementById("volumeCounter").textContent="";
   clearTaskQuestionPanel();
   hidePopup();
-  rx=-0.18;
-  ry=-0.58;
-  scale=125;
+  rx=0.28;
+  ry=0.62;
+  scale=108;
   draw();
+
+  showPopup(
+    "Nimm dir für die nächste Aufgabe zunächst das Arbeitsblatt vorne ab! Starte dann mit der Bearbeitung!",
+    "#7c3aed"
+  );
 };
 
 task2SplitBtn.onclick=()=>{
   stopAnimation();
+  clearTaskQuestionPanel();
   task2CompleteMode=false;
   task2SplitMode=true;
   task2AnimStart=performance.now();
   startAnimation();
-  showTaskQuestion("split",1);
   draw();
 };
 
 task2CompleteBtn.onclick=()=>{
   stopAnimation();
+  clearTaskQuestionPanel();
   task2SplitMode=false;
   task2CompleteMode=true;
   task2AnimStart=performance.now();
   startAnimation();
-  showTaskQuestion("complete",1);
   draw();
 };
 
@@ -1075,6 +1216,7 @@ function finishPointer(e){
        for(const c of cubes){
          if(c.snap === null) c.hidden = true;
        }
+       showCalculationIntroPopup();
      }
      updateVolumeCounter();
    }
@@ -1093,7 +1235,7 @@ window.addEventListener("resize",()=>{
   if(cubesVisible)makeLooseCubes();
   draw();
 });
-if(innerWidth<700){ scale=95; }
+if(innerWidth<700){ scale=95; rx=0.28; ry=0.62; }
 draw();
 document.addEventListener("touchmove", function(e){
   if(e.target===canvas) e.preventDefault();
